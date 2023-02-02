@@ -1,23 +1,33 @@
 from flask import Flask, request, render_template, redirect, flash, session
-from flask_debugtoolbar import DebugToolbarExtension
+# from flask_debugtoolbar import DebugToolbarExtension
 from surveys import satisfaction_survey as survey
 
 res_key = "responses"
 
-app = Flask(__name__)
+# app.debug = True
+
+app=Flask(__name__, template_folder='templates')
 app.config['SECRET_KEY'] = "oh-so-secret"
 app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
 
-debug = DebugToolbarExtension(app)
+# debug = DebugToolbarExtension(app)
 
-
+# 
 @app.route("/")
 def begin_survey():
     '''select a survey'''
-    return render_template("survey_start.html" survey = survey)
+    return render_template("survey_instructions.html", survey = survey)
+
+
+@app.route("/begin", methods = ["POST"])
+def start():
+    '''session of responses'''
+    session[res_key] = []
+
+    return redirect("/questions/0")
     
 
-#
+
 @app.route('/questions/<int:qid>')
 def show_question(qid):
     '''current question display'''
@@ -38,7 +48,7 @@ def show_question(qid):
 
     question = survey.questions[qid]
     return render_template(
-        "question.html", question_num = qid, question = question
+        "questions.html", question_num = qid, question = question
     )
 
 
@@ -58,3 +68,8 @@ def handle_question():
         return redirect("/complete")
     else:
         return redirect(f"/questions/{len(responses)}")
+
+@app.route('/complete')
+def complete():
+    ''' show completioiin html'''
+    return render_template("complete.html")
