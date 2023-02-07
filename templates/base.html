@@ -4,13 +4,16 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Survey</title>
+    <title>{% block title %} Survey {% endblock %}</title>
+    <link rel="stylesheet" href="/static/pretty.css">
 </head>
 <body>
-    {% for msg in get_flashed_messages() %}
-        <p>{{ msg }}</p>
-    {% endfor %}
+<header>Survey</header>
+<main>
     {% block content %}
+
     {% endblock %}
+</main>
+<footer>Your opinion matters! </footer>
 </body>
 </html>

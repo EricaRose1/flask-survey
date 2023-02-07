@@ -1,75 +1,107 @@
-from flask import Flask, request, render_template, redirect, flash, session
+from flask import Flask, session, request, render_template, redirect, make_response, flash
 # from flask_debugtoolbar import DebugToolbarExtension
-from surveys import satisfaction_survey as survey
+from surveys import surveys
 
-res_key = "responses"
-
+app = Flask(__name__, template_folder = 'templates')
 # app.debug = True
 
-app=Flask(__name__, template_folder='templates')
-app.config['SECRET_KEY'] = "oh-so-secret"
+
+# secret key for session
+app.config["SECRET_KEY"] = "donotforgetthis!"
 app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
 
-# debug = DebugToolbarExtension(app)
+# toolbar = DebugToolbarExtension(app)
 
-# 
+
+CURRENT_SURVEY_KEY = 'current_survey'
+RESPONSES_KEY = 'responses'
+
+
 @app.route("/")
-def begin_survey():
+def pick_survey_form():
+    '''show form to pick a survey.'''
+    return render_template("pick-survey.html", surveys=surveys)
+
+
+@app.route("/", methods=["POST"])
+def pick_survey():
     '''select a survey'''
-    return render_template("survey_instructions.html", survey = survey)
+    survey_id = request.form['survey_code']
+
+    # don't let them re-take a survey until cookies cleared
+    if request.cookies.get(f"completed_{survey_id}"):
+        return render_template("already-done.html")
+
+    survey = surveys[survey_id]
+    session[CURRENT_SURVEY_KEY] = survey_id
+
+    return render_template("survey_start.html", survey=survey)
 
 
+# begin survey show 1st question
 @app.route("/begin", methods = ["POST"])
-def start():
+def start_survey():
     '''session of responses'''
-    session[res_key] = []
+    session[RESPONSES_KEY] = []
 
     return redirect("/questions/0")
+
+@app.route("/answer", methods=["POST"])
+def handle_question():
+    ''' save response and redirect to next question.'''
     
+    choice = request.form['answer']
+    text = request.form.get("text", "")
+
+    # add response to list in session
+    responses = session[RESPONSES_KEY]
+    responses.append({"choice": choice, "text": text})
+
+    # add response to session
+    session[RESPONSES_KEY] = responses
+    survey_code = session[CURRENT_SURVEY_KEY]
+    survey = surveys[survey_code]
+
+    if(len(responses) == len(survey.questions)):
+        # thank for answering all questions
+        return render_template('complete.html')
+    else: 
+        return redirect(f"/questions/{len(responses)}")
 
 
-@app.route('/questions/<int:qid>')
+@app.route("/questions/<int:qid>")
 def show_question(qid):
     '''current question display'''
-    responses = session.get(res_key)
+    responses = session.get(RESPONSES_KEY)
+    survey_code = session[CURRENT_SURVEY_KEY]
+    survey = surveys[survey_code]
 
+    if (responses is None):
+        # question must be completed to move to next
+        return redirect("/")
+    if (len(responses) == len(survey.questions)):
+        return redirect("/complete")
     if (len(responses) != qid):
         # flash message for access question page too soon
         flash(f"Invalid question id: {qid}.")
         return redirect(f"/questions/{len(responses)}")
 
-    if (len(responses) == len(survey.questions)):
-        # They've answered all the questions! Thank them.
-        return redirect("/complete")
-
-    if (responses is None):
-        #question must be completed to move to next
-        return redirect("/")
-
     question = survey.questions[qid]
-    return render_template(
-        "questions.html", question_num = qid, question = question
-    )
+
+    return render_template("question.html", question_num=qid, question=question)
 
 
-@app.route("/answer", methods = ["POST"])
-def handle_question():
-    ''' save answers and move to next question '''
-    choice = request.form['answer']
+    @app.route("/complete")
+    def say_thanks():
+        '''Thank user and list responses.'''
 
-    #add response to the session
-    responses = session[res_key]
-    responses.append(choice)
-    session[res_key] = responses
+        survey_id = session[CURRENT_SURVEY_KEY]
+        survey = surveys[survey_id]
+        responses = session[RESPONSES_KEY]
 
-    #next question
-    if(len(responses) == len(survey.questions)):
-        #answered all questions
-        return redirect("/complete")
-    else:
-        return redirect(f"/questions/{len(responses)}")
+        html = render_template("complete.html", survey=survey, responses=responses)
 
-@app.route('/complete')
-def complete():
-    ''' show completioiin html'''
-    return render_template("complete.html")
+        # set cookie noting this survey is done so they can't re-do it
+        response = make_response(html)
+        response.set_cookie(f"completed_{survey_id}", "yes", max_age=60)
+        return response
